@@ -14,25 +14,19 @@ AM_CFLAGS =\
          -Wall\
          -g
 
-plugin_LTLIBRARIES = libgodc.la
+plugin_LTLIBRARIES = librememberposition.la
 
-libgodc_la_SOURCES = \
-	godc-provider-open-docs.h	\
-	godc-provider-open-docs.c	\
-	godc-provider-recent.h		\
-	godc-provider-recent.c		\
-	godc-provider-file-browser.h	\
-	godc-provider-file-browser.c	\
-	godc-plugin.h			\
-	godc-plugin.c
+librememberposition_la_SOURCES = \
+	rememberposition-plugin.h	\
+	rememberposition-plugin.c
 
-libgodc_la_LDFLAGS = $(PLUGIN_LIBTOOL_FLAGS) `pkg-config --libs gtksourceview-2.0` `pkg-config --libs gconf-2.0`
+librememberposition_la_LDFLAGS = $(PLUGIN_LIBTOOL_FLAGS) `pkg-config --libs gtksourceview-2.0` `pkg-config --libs gconf-2.0`
 
 # Glade files (if you use glade for your plugin, list those files here)
 gladedir = $(datadir)/gedit-2/glade
 glade_DATA =
 
-plugin_in_files = godc.gedit-plugin.desktop.in
+plugin_in_files = rememberposition.gedit-plugin.desktop.in
 
 %.gedit-plugin: %.gedit-plugin.desktop.in $(INTLTOOL_MERGE) $(wildcard $(top_srcdir)/po/*po) ; $(INTLTOOL_MERGE) $(top_srcdir)/po $< $@ -d -u -c $(top_builddir)/po/.intltool-merge-cache
 

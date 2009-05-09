@@ -3,7 +3,7 @@ dnl Process this file with autoconf to produce a configure script.
 GEDIT_MAJOR=2.20.0
 GEDIT_PLUGINS_MAJOR=2.20.0
 
-AC_INIT(gedit-godc-plugin, 0.1.0)
+AC_INIT(gedit-rememberposition-plugin, 0.1.0)
 
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
@@ -38,7 +38,7 @@ AC_SUBST(ACLOCAL_AMFLAGS, "$ACLOCAL_FLAGS -I m4")
 # Gettext stuff.
 # ================================================================
 
-GETTEXT_PACKAGE=gedit-godc
+GETTEXT_PACKAGE=gedit-rememberposition
 AC_SUBST(GETTEXT_PACKAGE)
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [Gettext package])
 AM_GLIB_GNU_GETTEXT
