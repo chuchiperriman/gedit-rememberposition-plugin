@@ -1,0 +1,9 @@
+[Gedit Plugin]
+Module=godc
+IAge=2
+_Name=Open Documents Completion Plugin
+_Description=Show in the completion widget a list with open or recent documents
+Icon=gedit-plugin
+Authors=Jesús Barbero Rodríguez <chuchiperriman@gmail.com>
+Copyright=Copyright © 2009 chuchiperriman
+Website=http://www.gedit.org
