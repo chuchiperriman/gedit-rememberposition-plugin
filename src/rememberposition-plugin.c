@@ -115,12 +115,22 @@ position_store (RememberPositionPlugin *self,
 static gboolean
 position_navigate_previous (RememberPositionPlugin *self)
 {
+	GtkTextIter iter = {0,};
 	Position *pos = position_get_last (self);
 	if (pos == NULL)
 		return FALSE;
 	
 	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
 	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
+	gtk_text_buffer_get_iter_at_line_offset (buffer, 
+						 &iter,
+						 pos->line,
+						 pos->offset);
+	
+	gtk_text_buffer_place_cursor (buffer,
+				      &iter);
+	self->priv->positions = g_list_delete_link (self->priv->positions, g_list_last (self->priv->positions));
+	return TRUE;
 	/*TODO Set the position into the line+offset (and document in a future)*/
 }
 
@@ -156,16 +166,18 @@ move_cursor_cb (GtkTextView *text_view,
 }
 
 static gboolean
-key_press_cb (GtkWidget   *widget,
+key_release_cb (GtkWidget   *widget,
 	      GdkEventKey *event,
 	      gpointer     user_data)
 {
 	GdkModifierType mod;
-
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
+	
 	mod = gtk_accelerator_get_default_mod_mask () & event->state;
 	if (mod == GDK_MOD1_MASK && event->keyval == GDK_Left)
 	{
 		g_debug ("navigate");
+		position_navigate_previous (self);
 	}
 	return FALSE;
 }
@@ -182,8 +194,8 @@ tab_added_cb (GeditWindow *geditwindow,
 	g_signal_connect (view, "move-cursor",
 			  G_CALLBACK (move_cursor_cb),
 			  self);
-	g_signal_connect (view, "key-press-event",
-			  G_CALLBACK (key_press_cb),
+	g_signal_connect (view, "key-release-event",
+			  G_CALLBACK (key_release_cb),
 			  self);
 	g_signal_connect (buffer, "insert-text",
 			  G_CALLBACK (insert_text_cb),
