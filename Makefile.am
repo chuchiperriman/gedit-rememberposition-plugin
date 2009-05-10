@@ -4,7 +4,6 @@ ACLOCAL_AMFLAGS = -I m4
 
 EXTRA_DIST =			\
 	autogen.sh		\
-	ChangeLog  		\
 	gnome-doc-utils.make	\
 	intltool-extract.in 	\
 	intltool-merge.in 	\

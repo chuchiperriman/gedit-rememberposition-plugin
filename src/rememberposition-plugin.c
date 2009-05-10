@@ -24,6 +24,7 @@
 
 #include "rememberposition-plugin.h"
 
+#include <gdk/gdkkeysyms.h>
 #include <gdk/gdk.h>
 #include <glib/gi18n-lib.h>
 #include <gedit/gedit-debug.h>
@@ -34,7 +35,17 @@ struct _RememberPositionPluginPrivate
 {
 	GeditWindow *gedit_window;
 	GtkWidget *window;
+	GList *positions;
 };
+
+struct _Position
+{
+	GeditDocument *doc;
+	gint	 line;
+	gint	 offset;
+};
+
+typedef struct _Position Position;
 
 GEDIT_PLUGIN_REGISTER_TYPE (RememberPositionPlugin, remember_position_plugin)
 
@@ -55,13 +66,131 @@ remember_position_plugin_finalize (GObject *object)
 }
 
 static void
+position_free (Position *pos)
+{
+	g_slice_free (Position, pos);
+}
+
+static Position*
+position_get_last (RememberPositionPlugin *self)
+{
+	Position *pos = NULL;
+	GList *last = g_list_last (self->priv->positions);
+	if (last != NULL)
+		pos = (Position*)last->data;
+	
+	return pos;
+}
+
+static gboolean
+position_store (RememberPositionPlugin *self,
+		GtkTextBuffer *buffer)
+{
+	/*TODO We must free the mark?*/
+	gint line;
+	GtkTextMark *insert = gtk_text_buffer_get_insert (buffer);
+	GtkTextIter iter = {0,};
+	gtk_text_buffer_get_iter_at_mark (buffer,
+					  &iter,
+					  insert);
+	line = gtk_text_iter_get_line (&iter);
+	
+	Position *last =position_get_last (self);
+	
+	
+	if (last == NULL || line > (last->line + 5) || line < (last->line - 5))
+	{
+		Position *pos = g_slice_new (Position);
+		pos->doc = gedit_window_get_active_document(self->priv->gedit_window);
+		pos->line = line;
+		pos->offset = gtk_text_iter_get_line_offset (&iter);
+		self->priv->positions = g_list_append (self->priv->positions, pos);
+		g_debug ("Stored position: %i-%i", pos->line, pos->offset);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static gboolean
+position_navigate_previous (RememberPositionPlugin *self)
+{
+	Position *pos = position_get_last (self);
+	if (pos == NULL)
+		return FALSE;
+	
+	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
+	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
+	/*TODO Set the position into the line+offset (and document in a future)*/
+}
+
+static void
+insert_text_cb (GtkTextBuffer *buffer,
+		GtkTextIter   *location,
+		gchar         *text,
+		gint           len,
+		gpointer       user_data)
+{
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
+	position_store (self, buffer);
+}
+
+static void
+delete_range_cb (GtkTextBuffer *buffer,
+		 GtkTextIter   *start,
+		 GtkTextIter   *end,
+		 gpointer       user_data)
+{
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
+	position_store (self, buffer);
+}
+
+static void
+move_cursor_cb (GtkTextView *text_view,
+		GtkMovementStep step,
+		gint            count,
+		gboolean        extend_selection,
+		gpointer        user_data)
+{
+	
+}
+
+static gboolean
+key_press_cb (GtkWidget   *widget,
+	      GdkEventKey *event,
+	      gpointer     user_data)
+{
+	GdkModifierType mod;
+
+	mod = gtk_accelerator_get_default_mod_mask () & event->state;
+	if (mod == GDK_MOD1_MASK && event->keyval == GDK_Left)
+	{
+		g_debug ("navigate");
+	}
+	return FALSE;
+}
+
+static void
 tab_added_cb (GeditWindow *geditwindow,
 	      GeditTab    *tab,
 	      gpointer     user_data)
 {
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
 	GeditView *view = gedit_tab_get_view (tab);
+	GtkTextBuffer *buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (view));
 	
-	g_debug ("provider registered");
+	g_signal_connect (view, "move-cursor",
+			  G_CALLBACK (move_cursor_cb),
+			  self);
+	g_signal_connect (view, "key-press-event",
+			  G_CALLBACK (key_press_cb),
+			  self);
+	g_signal_connect (buffer, "insert-text",
+			  G_CALLBACK (insert_text_cb),
+			  self);
+	g_signal_connect (buffer, "delete-range",
+			  G_CALLBACK (delete_range_cb),
+			  self);
 }
 
 static void
@@ -70,8 +199,9 @@ impl_activate (GeditPlugin *plugin,
 {
 	RememberPositionPlugin *self = (RememberPositionPlugin*)plugin;
 	self->priv->gedit_window = window;
+	self->priv->positions = NULL;
 	gedit_debug (DEBUG_PLUGINS);
-	
+
 	g_signal_connect (window, "tab-added",
 			  G_CALLBACK (tab_added_cb),
 			  self);
@@ -82,6 +212,12 @@ impl_deactivate (GeditPlugin *plugin,
 		 GeditWindow *window)
 {
 	gedit_debug (DEBUG_PLUGINS);
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (plugin);
+	if (self->priv->positions != NULL)
+	{
+		g_list_foreach (self->priv->positions, (GFunc)position_free, NULL);
+		g_list_free (self->priv->positions);
+	}
 }
 
 static void
