@@ -40,9 +40,9 @@ struct _RememberPositionPluginPrivate
 
 struct _Position
 {
-	GeditDocument *doc;
-	gint	 line;
-	gint	 offset;
+	GeditTab	*tab;
+	gint		 line;
+	gint		 offset;
 };
 
 typedef struct _Position Position;
@@ -101,7 +101,7 @@ position_store (RememberPositionPlugin *self,
 	if (last == NULL || line > (last->line + 5) || line < (last->line - 5))
 	{
 		Position *pos = g_slice_new (Position);
-		pos->doc = gedit_window_get_active_document(self->priv->gedit_window);
+		pos->tab = gedit_window_get_active_tab(self->priv->gedit_window);
 		pos->line = line;
 		pos->offset = gtk_text_iter_get_line_offset (&iter);
 		self->priv->positions = g_list_append (self->priv->positions, pos);
@@ -121,12 +121,25 @@ position_navigate_previous (RememberPositionPlugin *self)
 		return FALSE;
 	
 	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
+	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
+	if (doc != posdoc)
+	{
+		g_debug ("other document");
+		gedit_window_set_active_tab (self->priv->gedit_window, pos->tab);
+		doc = posdoc;
+		/*Sets the document active*/
+	}
 	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
+	/*TODO We need to check if the iter is ok or the offset because
+	if the offset is out of rank, gedit crash
 	gtk_text_buffer_get_iter_at_line_offset (buffer, 
 						 &iter,
 						 pos->line,
 						 pos->offset);
-	
+	*/
+	gtk_text_buffer_get_iter_at_line (buffer, 
+					  &iter,
+					  pos->line);
 	gtk_text_buffer_place_cursor (buffer,
 				      &iter);
 	self->priv->positions = g_list_delete_link (self->priv->positions, g_list_last (self->priv->positions));
@@ -183,6 +196,34 @@ key_release_cb (GtkWidget   *widget,
 }
 
 static void
+tab_removed_cb (GeditWindow *geditwindow,
+		GeditTab    *tab,
+		gpointer     user_data)
+{
+	GList *l;
+	GList *tmp;
+	Position *pos;
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
+	if (self->priv->positions != NULL)
+	{
+		l = self->priv->positions;
+		while (l)
+		{
+			tmp = l;
+			l = g_list_next (l);
+			pos = (Position*)tmp->data;
+			if (pos->tab == tab)
+			{
+				
+				g_debug ("Removed position: %i-%i", pos->line, pos->offset);
+				self->priv->positions = g_list_delete_link (self->priv->positions, tmp);
+				position_free (pos);
+			}
+		}
+	}
+}
+
+static void
 tab_added_cb (GeditWindow *geditwindow,
 	      GeditTab    *tab,
 	      gpointer     user_data)
@@ -216,6 +257,9 @@ impl_activate (GeditPlugin *plugin,
 
 	g_signal_connect (window, "tab-added",
 			  G_CALLBACK (tab_added_cb),
+			  self);
+	g_signal_connect (window, "tab-removed",
+			  G_CALLBACK (tab_removed_cb),
 			  self);
 }
 
