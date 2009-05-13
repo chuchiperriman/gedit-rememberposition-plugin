@@ -152,9 +152,47 @@ set_current_list (RememberPositionPlugin *self)
 }
 
 static gboolean
-position_navigate_previous (RememberPositionPlugin *self)
+position_navigate (RememberPositionPlugin *self, Position *pos)
 {
 	GtkTextIter iter = {0,};
+
+	if (pos == NULL)
+		return FALSE;
+	
+	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
+	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
+	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
+	GtkTextView *view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
+	if (doc != posdoc)
+	{
+		/*Sets the document active*/
+		g_debug ("other document");
+		gedit_window_set_active_tab (self->priv->gedit_window, pos->tab);
+		doc = posdoc;
+	}
+	
+	/*TODO We need to check if the iter is ok or the offset because
+	if the offset is out of rank, gedit crash
+	gtk_text_buffer_get_iter_at_line_offset (buffer, 
+						 &iter,
+						 pos->line,
+						 pos->offset);
+	*/
+	gtk_text_buffer_get_iter_at_line (buffer, 
+					  &iter,
+					  pos->line);
+	gtk_text_buffer_place_cursor (buffer,
+				      &iter);
+	gtk_text_view_scroll_to_iter (view, &iter,0.0,FALSE,0.0,0.0);
+	/*TODO Scroll to cursor*/
+	g_debug ("navigate");
+	return TRUE;
+	/*TODO Set the position into the line+offset (and document in a future)*/
+}
+
+static gboolean
+position_navigate_previous (RememberPositionPlugin *self)
+{
 	Position *pos;
 	GList *temp;
 	
@@ -175,37 +213,33 @@ position_navigate_previous (RememberPositionPlugin *self)
 		self->priv->current_pos = temp;
 	}
 
-	if (pos == NULL)
+	return position_navigate (self, pos);
+}
+
+static gboolean
+position_navigate_next (RememberPositionPlugin *self)
+{
+	Position *pos;
+	GList *temp;
+	
+	if (self->priv->positions == NULL)
 		return FALSE;
 	
-	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
-	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
-	GtkTextView *view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
-	if (doc != posdoc)
+	if (self->priv->current_list == NULL)
 	{
-		g_debug ("other document");
-		gedit_window_set_active_tab (self->priv->gedit_window, pos->tab);
-		doc = posdoc;
-		/*Sets the document active*/
+		set_current_list (self);
+		pos = (Position*)self->priv->current_pos->data;
 	}
-	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
-	/*TODO We need to check if the iter is ok or the offset because
-	if the offset is out of rank, gedit crash
-	gtk_text_buffer_get_iter_at_line_offset (buffer, 
-						 &iter,
-						 pos->line,
-						 pos->offset);
-	*/
-	gtk_text_buffer_get_iter_at_line (buffer, 
-					  &iter,
-					  pos->line);
-	gtk_text_buffer_place_cursor (buffer,
-				      &iter);
-	gtk_text_view_scroll_to_iter (view, &iter,0.0,FALSE,0.0,0.0);
-	/*TODO Scroll to cursor*/
-	g_debug ("navigate");
-	return TRUE;
-	/*TODO Set the position into the line+offset (and document in a future)*/
+	else
+	{
+		temp = g_list_next (self->priv->current_pos);
+		if (temp == NULL)
+			return FALSE;
+		pos = (Position*)temp->data;
+		self->priv->current_pos = temp;
+	}
+
+	return position_navigate (self, pos);
 }
 
 static void
@@ -248,9 +282,12 @@ key_release_cb (GtkWidget   *widget,
 	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (user_data);
 	
 	mod = gtk_accelerator_get_default_mod_mask () & event->state;
-	if (mod == GDK_MOD1_MASK && event->keyval == GDK_Left)
+	if (mod == GDK_MOD1_MASK)
 	{
-		position_navigate_previous (self);
+		if (event->keyval == GDK_Left)
+			position_navigate_previous (self);
+		else if (event->keyval == GDK_Right)
+			position_navigate_next (self);
 	}
 	return FALSE;
 }
