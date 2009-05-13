@@ -36,6 +36,8 @@ struct _RememberPositionPluginPrivate
 	GeditWindow *gedit_window;
 	GtkWidget *window;
 	GList *positions;
+	GList *current;
+	GList *current_list;
 };
 
 struct _Position
@@ -68,6 +70,7 @@ remember_position_plugin_finalize (GObject *object)
 static void
 position_free (Position *pos)
 {
+	g_debug ("Removed position: %i-%i", pos->line, pos->offset);
 	g_slice_free (Position, pos);
 }
 
@@ -80,6 +83,27 @@ position_get_last (RememberPositionPlugin *self)
 		pos = (Position*)last->data;
 	
 	return pos;
+}
+
+static void
+position_free_list (GList *list)
+{
+	g_list_foreach (list, (GFunc)position_free, NULL);
+	g_list_free (list);
+}
+
+static void
+position_truncate_to_current (RememberPositionPlugin *self)
+{
+	if (self->priv->current != NULL)
+	{
+		g_debug ("truncate");
+		/*TODO remove_link quita solo el link ese, necesitamos quitar todos a partir de ese*/
+		
+		self->priv->positions = g_list_remove_link (self->priv->positions, self->priv->current);
+		position_free_list (self->priv->current);
+		self->priv->current = NULL;
+	}
 }
 
 static gboolean
@@ -95,8 +119,8 @@ position_store (RememberPositionPlugin *self,
 					  insert);
 	line = gtk_text_iter_get_line (&iter);
 	
+	position_truncate_to_current (self);
 	Position *last =position_get_last (self);
-	
 	
 	if (last == NULL || line > (last->line + 5) || line < (last->line - 5))
 	{
@@ -116,7 +140,23 @@ static gboolean
 position_navigate_previous (RememberPositionPlugin *self)
 {
 	GtkTextIter iter = {0,};
-	Position *pos = position_get_last (self);
+	Position *pos;
+	GList *temp;
+	
+	if (self->priv->current == NULL)
+	{
+		pos = position_get_last (self);
+		self->priv->current = g_list_last (self->priv->positions);
+	}
+	else
+	{
+		temp = g_list_previous (self->priv->current);
+		if (temp == NULL)
+			return FALSE;
+		pos = (Position*)temp->data;
+		self->priv->current = temp;
+	}
+	
 	if (pos == NULL)
 		return FALSE;
 	
@@ -142,7 +182,6 @@ position_navigate_previous (RememberPositionPlugin *self)
 					  pos->line);
 	gtk_text_buffer_place_cursor (buffer,
 				      &iter);
-	self->priv->positions = g_list_delete_link (self->priv->positions, g_list_last (self->priv->positions));
 	return TRUE;
 	/*TODO Set the position into the line+offset (and document in a future)*/
 }
@@ -214,8 +253,6 @@ tab_removed_cb (GeditWindow *geditwindow,
 			pos = (Position*)tmp->data;
 			if (pos->tab == tab)
 			{
-				
-				g_debug ("Removed position: %i-%i", pos->line, pos->offset);
 				self->priv->positions = g_list_delete_link (self->priv->positions, tmp);
 				position_free (pos);
 			}
@@ -250,10 +287,13 @@ static void
 impl_activate (GeditPlugin *plugin,
 	       GeditWindow *window)
 {
+	gedit_debug (DEBUG_PLUGINS);
+	
 	RememberPositionPlugin *self = (RememberPositionPlugin*)plugin;
 	self->priv->gedit_window = window;
 	self->priv->positions = NULL;
-	gedit_debug (DEBUG_PLUGINS);
+	self->priv->current = NULL;
+	self->priv->current_list = NULL;
 
 	g_signal_connect (window, "tab-added",
 			  G_CALLBACK (tab_added_cb),
