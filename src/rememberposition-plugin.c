@@ -36,7 +36,7 @@ struct _RememberPositionPluginPrivate
 	GeditWindow *gedit_window;
 	GtkWidget *window;
 	GList *positions;
-	GList *current;
+	GList *current_pos;
 	GList *current_list;
 };
 
@@ -77,33 +77,37 @@ position_free (Position *pos)
 static Position*
 position_get_last (RememberPositionPlugin *self)
 {
-	Position *pos = NULL;
-	GList *last = g_list_last (self->priv->positions);
-	if (last != NULL)
-		pos = (Position*)last->data;
-	
-	return pos;
+       Position *pos = NULL;
+       GList *last = g_list_last (self->priv->positions);
+       if (last != NULL)
+               pos = (Position*)last->data;
+       
+       return pos;
 }
 
 static void
-position_free_list (GList *list)
+rebuild_positions (RememberPositionPlugin *self)
 {
-	g_list_foreach (list, (GFunc)position_free, NULL);
-	g_list_free (list);
-}
-
-static void
-position_truncate_to_current (RememberPositionPlugin *self)
-{
-	if (self->priv->current != NULL)
+	GList *temp, *final = NULL;
+	Position *pos = (Position*)self->priv->current_pos->data;
+	for (temp = self->priv->current_list; temp; temp = g_list_next (temp))
 	{
-		g_debug ("truncate");
-		/*TODO remove_link quita solo el link ese, necesitamos quitar todos a partir de ese*/
-		
-		self->priv->positions = g_list_remove_link (self->priv->positions, self->priv->current);
-		position_free_list (self->priv->current);
-		self->priv->current = NULL;
+		if (pos == temp->data)
+			break;
+		final = g_list_append (final, temp->data);
 	}
+	
+	for (temp = g_list_last (self->priv->current_list); temp; temp = g_list_previous (temp))
+	{
+		final = g_list_append (final, temp->data);
+		if (pos == temp->data)
+			break;
+	}
+	g_list_free (self->priv->positions);
+	self->priv->positions = final;
+	g_list_free(self->priv->current_list);
+	self->priv->current_list = NULL;
+	self->priv->current_pos = NULL;
 }
 
 static gboolean
@@ -119,8 +123,12 @@ position_store (RememberPositionPlugin *self,
 					  insert);
 	line = gtk_text_iter_get_line (&iter);
 	
-	position_truncate_to_current (self);
-	Position *last =position_get_last (self);
+	if (self->priv->current_list != NULL)
+	{
+		rebuild_positions (self);
+	}
+	
+	Position *last = position_get_last (self);
 	
 	if (last == NULL || line > (last->line + 5) || line < (last->line - 5))
 	{
@@ -136,6 +144,13 @@ position_store (RememberPositionPlugin *self,
 	return FALSE;
 }
 
+static void
+set_current_list (RememberPositionPlugin *self)
+{
+	self->priv->current_list = g_list_copy (self->priv->positions);
+	self->priv->current_pos = g_list_last (self->priv->current_list);
+}
+
 static gboolean
 position_navigate_previous (RememberPositionPlugin *self)
 {
@@ -143,25 +158,29 @@ position_navigate_previous (RememberPositionPlugin *self)
 	Position *pos;
 	GList *temp;
 	
-	if (self->priv->current == NULL)
+	if (self->priv->positions == NULL)
+		return FALSE;
+	
+	if (self->priv->current_list == NULL)
 	{
-		pos = position_get_last (self);
-		self->priv->current = g_list_last (self->priv->positions);
+		set_current_list (self);
+		pos = (Position*)self->priv->current_pos->data;
 	}
 	else
 	{
-		temp = g_list_previous (self->priv->current);
+		temp = g_list_previous (self->priv->current_pos);
 		if (temp == NULL)
 			return FALSE;
 		pos = (Position*)temp->data;
-		self->priv->current = temp;
+		self->priv->current_pos = temp;
 	}
-	
+
 	if (pos == NULL)
 		return FALSE;
 	
 	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
 	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
+	GtkTextView *view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
 	if (doc != posdoc)
 	{
 		g_debug ("other document");
@@ -182,6 +201,9 @@ position_navigate_previous (RememberPositionPlugin *self)
 					  pos->line);
 	gtk_text_buffer_place_cursor (buffer,
 				      &iter);
+	gtk_text_view_scroll_to_iter (view, &iter,0.0,FALSE,0.0,0.0);
+	/*TODO Scroll to cursor*/
+	g_debug ("navigate");
 	return TRUE;
 	/*TODO Set the position into the line+offset (and document in a future)*/
 }
@@ -228,7 +250,6 @@ key_release_cb (GtkWidget   *widget,
 	mod = gtk_accelerator_get_default_mod_mask () & event->state;
 	if (mod == GDK_MOD1_MASK && event->keyval == GDK_Left)
 	{
-		g_debug ("navigate");
 		position_navigate_previous (self);
 	}
 	return FALSE;
@@ -258,6 +279,7 @@ tab_removed_cb (GeditWindow *geditwindow,
 			}
 		}
 	}
+	/*TODO Reset current list*/
 }
 
 static void
@@ -292,7 +314,7 @@ impl_activate (GeditPlugin *plugin,
 	RememberPositionPlugin *self = (RememberPositionPlugin*)plugin;
 	self->priv->gedit_window = window;
 	self->priv->positions = NULL;
-	self->priv->current = NULL;
+	self->priv->current_pos = NULL;
 	self->priv->current_list = NULL;
 
 	g_signal_connect (window, "tab-added",
