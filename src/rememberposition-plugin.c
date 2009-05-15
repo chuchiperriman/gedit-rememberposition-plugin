@@ -31,6 +31,8 @@
 
 #define REMEMBER_POSITION_PLUGIN_GET_PRIVATE(object)	(G_TYPE_INSTANCE_GET_PRIVATE ((object), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPluginPrivate))
 
+#define MIN_LEN 19
+
 struct _RememberPositionPluginPrivate
 {
 	GeditWindow *gedit_window;
@@ -70,7 +72,6 @@ remember_position_plugin_finalize (GObject *object)
 static void
 position_free (Position *pos)
 {
-	g_debug ("Removed position: %i-%i", pos->line, pos->offset);
 	g_slice_free (Position, pos);
 }
 
@@ -83,6 +84,14 @@ position_get_last (RememberPositionPlugin *self)
                pos = (Position*)last->data;
        
        return pos;
+}
+
+static void
+clean_current_list (RememberPositionPlugin *self)
+{
+	g_list_free(self->priv->current_list);
+	self->priv->current_list = NULL;
+	self->priv->current_pos = NULL;
 }
 
 static void
@@ -105,9 +114,8 @@ rebuild_positions (RememberPositionPlugin *self)
 	}
 	g_list_free (self->priv->positions);
 	self->priv->positions = final;
-	g_list_free(self->priv->current_list);
-	self->priv->current_list = NULL;
-	self->priv->current_pos = NULL;
+	
+	clean_current_list (self);
 }
 
 static gboolean
@@ -118,6 +126,7 @@ position_store (RememberPositionPlugin *self,
 	gint line;
 	GtkTextMark *insert = gtk_text_buffer_get_insert (buffer);
 	GtkTextIter iter = {0,};
+	GeditDocument *doc = gedit_window_get_active_document (self->priv->gedit_window);
 	gtk_text_buffer_get_iter_at_mark (buffer,
 					  &iter,
 					  insert);
@@ -130,14 +139,13 @@ position_store (RememberPositionPlugin *self,
 	
 	Position *last = position_get_last (self);
 	
-	if (last == NULL || line > (last->line + 5) || line < (last->line - 5))
+	if (last == NULL || doc != gedit_tab_get_document(last->tab) || line > (last->line + MIN_LEN) || line < (last->line - MIN_LEN))
 	{
 		Position *pos = g_slice_new (Position);
 		pos->tab = gedit_window_get_active_tab(self->priv->gedit_window);
 		pos->line = line;
 		pos->offset = gtk_text_iter_get_line_offset (&iter);
 		self->priv->positions = g_list_append (self->priv->positions, pos);
-		g_debug ("Stored position: %i-%i", pos->line, pos->offset);
 		return TRUE;
 	}
 
@@ -166,7 +174,6 @@ position_navigate (RememberPositionPlugin *self, Position *pos)
 	if (doc != posdoc)
 	{
 		/*Sets the document active*/
-		g_debug ("other document");
 		gedit_window_set_active_tab (self->priv->gedit_window, pos->tab);
 		doc = posdoc;
 	}
@@ -184,8 +191,6 @@ position_navigate (RememberPositionPlugin *self, Position *pos)
 	gtk_text_buffer_place_cursor (buffer,
 				      &iter);
 	gtk_text_view_scroll_to_iter (view, &iter,0.0,FALSE,0.0,0.0);
-	/*TODO Scroll to cursor*/
-	g_debug ("navigate");
 	return TRUE;
 	/*TODO Set the position into the line+offset (and document in a future)*/
 }
@@ -316,7 +321,7 @@ tab_removed_cb (GeditWindow *geditwindow,
 			}
 		}
 	}
-	/*TODO Reset current list*/
+	clean_current_list (self);
 }
 
 static void
