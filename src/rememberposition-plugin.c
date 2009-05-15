@@ -31,7 +31,7 @@
 
 #define REMEMBER_POSITION_PLUGIN_GET_PRIVATE(object)	(G_TYPE_INSTANCE_GET_PRIVATE ((object), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPluginPrivate))
 
-#define MIN_LEN 19
+#define MIN_LEN 14
 
 struct _RememberPositionPluginPrivate
 {
@@ -118,6 +118,16 @@ rebuild_positions (RememberPositionPlugin *self)
 	clean_current_list (self);
 }
 
+static Position*
+position_new (RememberPositionPlugin *self, GtkTextIter *iter)
+{
+	Position *pos = g_slice_new (Position);
+	pos->tab = gedit_window_get_active_tab(self->priv->gedit_window);
+	pos->line = gtk_text_iter_get_line (iter);
+	pos->offset = gtk_text_iter_get_line_offset (iter);
+	return pos;
+}
+
 static gboolean
 position_store (RememberPositionPlugin *self,
 		GtkTextBuffer *buffer)
@@ -138,18 +148,28 @@ position_store (RememberPositionPlugin *self,
 	}
 	
 	Position *last = position_get_last (self);
-	
-	if (last == NULL || doc != gedit_tab_get_document(last->tab) || line > (last->line + MIN_LEN) || line < (last->line - MIN_LEN))
+	Position *pos = NULL;
+	if (last == NULL || doc != gedit_tab_get_document(last->tab))
 	{
-		Position *pos = g_slice_new (Position);
-		pos->tab = gedit_window_get_active_tab(self->priv->gedit_window);
-		pos->line = line;
-		pos->offset = gtk_text_iter_get_line_offset (&iter);
-		self->priv->positions = g_list_append (self->priv->positions, pos);
-		return TRUE;
+		pos = position_new (self, &iter);
 	}
+	else
+	{
+		if (line > (last->line + MIN_LEN) || line < (last->line - MIN_LEN))
+		{
+			pos = position_new (self, &iter);
+		}
+		else
+		{
+			last->line = line;
+			last->offset = gtk_text_iter_get_line_offset (&iter);
+		}
+	}
+	
+	if (pos != NULL)
+		self->priv->positions = g_list_append (self->priv->positions, pos);
 
-	return FALSE;
+	return TRUE;
 }
 
 static void
@@ -169,8 +189,8 @@ position_navigate (RememberPositionPlugin *self, Position *pos)
 	
 	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
 	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
-	GtkTextBuffer *buffer = GTK_TEXT_BUFFER (doc);
-	GtkTextView *view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
+	GtkTextBuffer *buffer;
+	GtkTextView *view;
 	if (doc != posdoc)
 	{
 		/*Sets the document active*/
@@ -178,6 +198,8 @@ position_navigate (RememberPositionPlugin *self, Position *pos)
 		doc = posdoc;
 	}
 	
+	buffer = GTK_TEXT_BUFFER (doc);
+	view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
 	/*TODO We need to check if the iter is ok or the offset because
 	if the offset is out of rank, gedit crash
 	gtk_text_buffer_get_iter_at_line_offset (buffer, 
