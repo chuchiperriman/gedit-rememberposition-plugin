@@ -37,11 +37,16 @@
 
 struct _RememberPositionPluginPrivate
 {
-	GeditWindow *gedit_window;
-	GtkWidget *window;
+	GeditWindow *window;
 	GList *positions;
 	GList *current_pos;
 	GList *current_list;
+};
+
+enum
+{
+	PROP_0,
+	PROP_WINDOW
 };
 
 struct _Position
@@ -73,9 +78,58 @@ remember_position_plugin_init (RememberPositionPlugin *plugin)
 static void
 remember_position_plugin_dispose (GObject *object)
 {
+    RememberPositionPlugin *plugin = REMEMBER_POSITION_PLUGIN (object);
+    
 	gedit_debug_message (DEBUG_PLUGINS,
 			     "RememberPositionPlugin finalizing");
+
+    if (plugin->priv->window != NULL)
+	{
+		g_object_unref (plugin->priv->window);
+		plugin->priv->window = NULL;
+	}
+	
 	G_OBJECT_CLASS (remember_position_plugin_parent_class)->dispose (object);
+}
+
+static void
+remember_position_plugin_set_property (GObject      *object,
+                                     guint         prop_id,
+                                     const GValue *value,
+                                     GParamSpec   *pspec)
+{
+	RememberPositionPlugin *plugin = REMEMBER_POSITION_PLUGIN (object);
+
+	switch (prop_id)
+	{
+		case PROP_WINDOW:
+			plugin->priv->window = GEDIT_WINDOW (g_value_dup_object (value));
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+			break;
+	}
+}
+
+static void
+remember_position_plugin_get_property (GObject    *object,
+                                     guint       prop_id,
+                                     GValue     *value,
+                                     GParamSpec *pspec)
+{
+	RememberPositionPlugin *plugin = REMEMBER_POSITION_PLUGIN (object);
+
+	switch (prop_id)
+	{
+		case PROP_WINDOW:
+			g_value_set_object (value, plugin->priv->window);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+			break;
+	}
 }
 
 static void
@@ -131,7 +185,7 @@ static Position*
 position_new (RememberPositionPlugin *self, GtkTextIter *iter)
 {
 	Position *pos = g_slice_new (Position);
-	pos->tab = gedit_window_get_active_tab(self->priv->gedit_window);
+	pos->tab = gedit_window_get_active_tab(self->priv->window);
 	pos->line = gtk_text_iter_get_line (iter);
 	pos->offset = gtk_text_iter_get_line_offset (iter);
 	return pos;
@@ -145,7 +199,7 @@ position_store (RememberPositionPlugin *self,
 	gint line;
 	GtkTextMark *insert = gtk_text_buffer_get_insert (buffer);
 	GtkTextIter iter = {0,};
-	GeditDocument *doc = gedit_window_get_active_document (self->priv->gedit_window);
+	GeditDocument *doc = gedit_window_get_active_document (self->priv->window);
 	gtk_text_buffer_get_iter_at_mark (buffer,
 					  &iter,
 					  insert);
@@ -196,19 +250,19 @@ position_navigate (RememberPositionPlugin *self, Position *pos)
 	if (pos == NULL)
 		return FALSE;
 	
-	GeditDocument *doc = gedit_window_get_active_document(self->priv->gedit_window);
+	GeditDocument *doc = gedit_window_get_active_document(self->priv->window);
 	GeditDocument *posdoc = gedit_tab_get_document (pos->tab);
 	GtkTextBuffer *buffer;
 	GtkTextView *view;
 	if (doc != posdoc)
 	{
 		/*Sets the document active*/
-		gedit_window_set_active_tab (self->priv->gedit_window, pos->tab);
+		gedit_window_set_active_tab (self->priv->window, pos->tab);
 		doc = posdoc;
 	}
 	
 	buffer = GTK_TEXT_BUFFER (doc);
-	view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->gedit_window));
+	view = GTK_TEXT_VIEW (gedit_window_get_active_view (self->priv->window));
 	/*TODO We need to check if the iter is ok or the offset because
 	if the offset is out of rank, gedit crash
 	gtk_text_buffer_get_iter_at_line_offset (buffer, 
@@ -310,7 +364,7 @@ move_cursor_cb (GtkTextView *text_view,
 }
 
 static gboolean
-key_release_cb (GtkWidget   *widget,
+key_press_cb (GtkWidget   *widget,
 	      GdkEventKey *event,
 	      gpointer     user_data)
 {
@@ -321,9 +375,15 @@ key_release_cb (GtkWidget   *widget,
 	if (mod == GDK_MOD1_MASK)
 	{
 		if (event->keyval == GDK_KEY_Left)
+		{
 			position_navigate_previous (self);
+			return TRUE;
+		}
 		else if (event->keyval == GDK_KEY_Right)
+		{
 			position_navigate_next (self);
+			return TRUE;
+		}
 	}
 	return FALSE;
 }
@@ -367,8 +427,8 @@ tab_added_cb (GeditWindow *geditwindow,
 	g_signal_connect (view, "move-cursor",
 			  G_CALLBACK (move_cursor_cb),
 			  self);
-	g_signal_connect (view, "key-release-event",
-			  G_CALLBACK (key_release_cb),
+	g_signal_connect (view, "key-press-event",
+			  G_CALLBACK (key_press_cb),
 			  self);
 	g_signal_connect (buffer, "insert-text",
 			  G_CALLBACK (insert_text_cb),
@@ -381,23 +441,17 @@ tab_added_cb (GeditWindow *geditwindow,
 static void
 impl_activate (GeditWindowActivatable *activatable)
 {
-    GeditWindow *window;
 	gedit_debug (DEBUG_PLUGINS);
 	
-	g_object_get (activatable,
-               "window", &window,
-               NULL);
-	
 	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN(activatable);
-	self->priv->gedit_window = window;
 	self->priv->positions = NULL;
 	self->priv->current_pos = NULL;
 	self->priv->current_list = NULL;
 
-	g_signal_connect (window, "tab-added",
+	g_signal_connect (self->priv->window, "tab-added",
 			  G_CALLBACK (tab_added_cb),
 			  self);
-	g_signal_connect (window, "tab-removed",
+	g_signal_connect (self->priv->window, "tab-removed",
 			  G_CALLBACK (tab_removed_cb),
 			  self);
 }
@@ -420,6 +474,10 @@ remember_position_plugin_class_init (RememberPositionPluginClass *klass)
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
 	object_class->dispose = remember_position_plugin_dispose;
+	object_class->set_property = remember_position_plugin_set_property;
+	object_class->get_property = remember_position_plugin_get_property;
+	
+	g_object_class_override_property (object_class, PROP_WINDOW, "window");
 
 	g_type_class_add_private (object_class, 
 				  sizeof (RememberPositionPluginPrivate));
