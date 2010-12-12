@@ -24,10 +24,12 @@
 
 #include "rememberposition-plugin.h"
 
-#include <gdk/gdkkeysyms.h>
-#include <gdk/gdk.h>
+#include <gtk/gtk.h>
 #include <glib/gi18n-lib.h>
 #include <gedit/gedit-debug.h>
+#include <gedit/gedit-window.h>
+#include <gedit/gedit-window-activatable.h>
+#include <gedit/gedit-document.h>
 
 #define REMEMBER_POSITION_PLUGIN_GET_PRIVATE(object)	(G_TYPE_INSTANCE_GET_PRIVATE ((object), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPluginPrivate))
 
@@ -51,7 +53,14 @@ struct _Position
 
 typedef struct _Position Position;
 
-GEDIT_PLUGIN_REGISTER_TYPE (RememberPositionPlugin, remember_position_plugin)
+static void gedit_window_activatable_iface_init (GeditWindowActivatableInterface *iface);
+
+G_DEFINE_DYNAMIC_TYPE_EXTENDED (RememberPositionPlugin,
+				remember_position_plugin,
+				PEAS_TYPE_EXTENSION_BASE,
+				0,
+				G_IMPLEMENT_INTERFACE_DYNAMIC (GEDIT_TYPE_WINDOW_ACTIVATABLE,
+							       gedit_window_activatable_iface_init))
 
 static void
 remember_position_plugin_init (RememberPositionPlugin *plugin)
@@ -62,11 +71,11 @@ remember_position_plugin_init (RememberPositionPlugin *plugin)
 }
 
 static void
-remember_position_plugin_finalize (GObject *object)
+remember_position_plugin_dispose (GObject *object)
 {
 	gedit_debug_message (DEBUG_PLUGINS,
 			     "RememberPositionPlugin finalizing");
-	G_OBJECT_CLASS (remember_position_plugin_parent_class)->finalize (object);
+	G_OBJECT_CLASS (remember_position_plugin_parent_class)->dispose (object);
 }
 
 static void
@@ -311,9 +320,9 @@ key_release_cb (GtkWidget   *widget,
 	mod = gtk_accelerator_get_default_mod_mask () & event->state;
 	if (mod == GDK_MOD1_MASK)
 	{
-		if (event->keyval == GDK_Left)
+		if (event->keyval == GDK_KEY_Left)
 			position_navigate_previous (self);
-		else if (event->keyval == GDK_Right)
+		else if (event->keyval == GDK_KEY_Right)
 			position_navigate_next (self);
 	}
 	return FALSE;
@@ -370,12 +379,16 @@ tab_added_cb (GeditWindow *geditwindow,
 }
 
 static void
-impl_activate (GeditPlugin *plugin,
-	       GeditWindow *window)
+impl_activate (GeditWindowActivatable *activatable)
 {
+    GeditWindow *window;
 	gedit_debug (DEBUG_PLUGINS);
 	
-	RememberPositionPlugin *self = (RememberPositionPlugin*)plugin;
+	g_object_get (activatable,
+               "window", &window,
+               NULL);
+	
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN(activatable);
 	self->priv->gedit_window = window;
 	self->priv->positions = NULL;
 	self->priv->current_pos = NULL;
@@ -390,11 +403,10 @@ impl_activate (GeditPlugin *plugin,
 }
 
 static void
-impl_deactivate (GeditPlugin *plugin,
-		 GeditWindow *window)
+impl_deactivate (GeditWindowActivatable *activatable)
 {
 	gedit_debug (DEBUG_PLUGINS);
-	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (plugin);
+	RememberPositionPlugin *self = REMEMBER_POSITION_PLUGIN (activatable);
 	if (self->priv->positions != NULL)
 	{
 		g_list_foreach (self->priv->positions, (GFunc)position_free, NULL);
@@ -403,24 +415,35 @@ impl_deactivate (GeditPlugin *plugin,
 }
 
 static void
-impl_update_ui (GeditPlugin *plugin,
-		GeditWindow *window)
+remember_position_plugin_class_init (RememberPositionPluginClass *klass)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+	object_class->dispose = remember_position_plugin_dispose;
+
+	g_type_class_add_private (object_class, 
+				  sizeof (RememberPositionPluginPrivate));
+}
+
+static void
+remember_position_plugin_class_finalize (RememberPositionPluginClass *klass)
 {
 }
 
 static void
-remember_position_plugin_class_init (RememberPositionPluginClass *klass)
+gedit_window_activatable_iface_init (GeditWindowActivatableInterface *iface)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS (klass);
-	GeditPluginClass *plugin_class = GEDIT_PLUGIN_CLASS (klass);
+	iface->activate = impl_activate;
+	iface->deactivate = impl_deactivate;
+}
 
-	object_class->finalize = remember_position_plugin_finalize;
+G_MODULE_EXPORT void
+peas_register_types (PeasObjectModule *module)
+{
+	remember_position_plugin_register_type (G_TYPE_MODULE (module));
 
-	plugin_class->activate = impl_activate;
-	plugin_class->deactivate = impl_deactivate;
-	plugin_class->update_ui = impl_update_ui;
-
-	g_type_class_add_private (object_class, 
-				  sizeof (RememberPositionPluginPrivate));
+	peas_object_module_register_extension_type (module,
+						    GEDIT_TYPE_WINDOW_ACTIVATABLE,
+						    REMEMBER_POSITION_TYPE_PLUGIN);
 }
 

@@ -1,0 +1,2 @@
+Configuration with in jhbuild and 64bits:
+./autogen.sh --prefix=/home/perriman/checkout/install --libdir=/home/perriman/checkout/install/lib64

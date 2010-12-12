@@ -1,9 +1,8 @@
-[Gedit Plugin]
+[Plugin]
 Module=rememberposition
 IAge=2
 _Name=Remember positions plugin
 _Description=Remember the previous cursor position and you can navigate to it
-Icon=gedit-plugin
 Authors=Jesús Barbero Rodríguez <chuchiperriman@gmail.com>
 Copyright=Copyright © 2009 chuchiperriman
 Website=http://github.com/chuchiperriman/gedit-rememberposition-plugin

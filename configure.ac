@@ -1,7 +1,11 @@
 dnl Process this file with autoconf to produce a configure script.
 
-GEDIT_MAJOR=2.20.0
-GEDIT_PLUGINS_MAJOR=2.20.0
+AC_PREREQ(2.59)
+
+m4_define(rememberposition_plugin_major_version,  2)
+m4_define(rememberposition_plugin_minor_version, 90)
+m4_define(rememberposition_plugin_micro_version,  0)
+m4_define(rememberposition_plugin_version, rememberposition_plugin_major_version.rememberposition_plugin_minor_version.rememberposition_plugin_micro_version)
 
 AC_INIT(gedit-rememberposition-plugin, 0.1.0)
 
@@ -9,20 +13,13 @@ AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PREFIX_PROGRAM([gedit])
 
-AC_SUBST(GEDIT_PLUGINS_MAJOR)
-
-AC_PREREQ(2.59)
-
-AM_INIT_AUTOMAKE([1.8])
-
-GNOME_DOC_INIT
+AM_INIT_AUTOMAKE([1.8 dist-bzip2 no-dist-gzip])
 
 AM_MAINTAINER_MODE
+m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
+
 AC_CONFIG_HEADERS([config.h])
 AC_DISABLE_STATIC
-
-AC_PATH_PROG(GCONFTOOL, gconftool-2)
-IT_PROG_INTLTOOL([0.35.0])
 
 AC_PROG_LIBTOOL
 
@@ -37,25 +34,28 @@ AC_SUBST(ACLOCAL_AMFLAGS, "$ACLOCAL_FLAGS -I m4")
 # ================================================================
 # Gettext stuff.
 # ================================================================
+IT_PROG_INTLTOOL([0.40.0])
+
+AM_GNU_GETTEXT_VERSION([0.17])
+AM_GNU_GETTEXT([external])
 
 GETTEXT_PACKAGE=gedit-rememberposition
 AC_SUBST(GETTEXT_PACKAGE)
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [Gettext package])
-AM_GLIB_GNU_GETTEXT
 
 # ================================================================
 # Start of pkg-config checks
 # ================================================================
 
 PKG_CHECK_MODULES(GEDIT, [
-	glib-2.0 >= 2.8.0
-	gtk+-2.0 >= 2.8.0
-	gtksourceview-2.0 >= 2.0.0
-	gedit-2.20 >= 2.20.0
-	libglade-2.0 >= 2.4.0
-	gtksourceview-2.0 >= 2.6.0
-	gconf-2.0
+	glib-2.0 >= 2.25.6
+	gtk+-3.0 >= 2.90.0
+	gtksourceview-3.0 >= 2.91.2
+	libpeas-1.0 >= 0.5.5
+	libpeas-gtk-1.0 >= 0.5.5
+	gedit >= 2.31.5
 ])
+
 GEDIT_LIBS="${GEDIT_LIBS}"
 AC_SUBST(GEDIT_LIBS)
 AC_SUBST(GEDIT_CFLAGS)
@@ -83,8 +83,15 @@ fi
 PLUGIN_LIBTOOL_FLAGS="-module -avoid-version"
 AC_SUBST(PLUGIN_LIBTOOL_FLAGS)
 
+GEDIT_PLUGINS_LIBS_DIR="$libdir/gedit/plugins"
+AC_SUBST(GEDIT_PLUGINS_LIBS_DIR)
+
+GEDIT_PLUGINS_DATA_DIR="$datadir/gedit/plugins"
+AC_SUBST(GEDIT_PLUGINS_DATA_DIR)
+
 AC_CONFIG_FILES([
 Makefile
+src/rememberposition.plugin.desktop.in
 src/Makefile
 po/Makefile.in
 ])

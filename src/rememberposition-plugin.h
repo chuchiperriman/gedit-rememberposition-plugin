@@ -16,6 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
  */
 
 #ifndef __REMEMBER_POSITION_PLUGIN_H__
@@ -23,13 +24,11 @@
 
 #include <glib.h>
 #include <glib-object.h>
-#include <gedit/gedit-plugin.h>
+#include <libpeas/peas-extension-base.h>
+#include <libpeas/peas-object-module.h>
 
 G_BEGIN_DECLS
 
-/*
- * Type checking and casting macros
- */
 #define REMEMBER_POSITION_TYPE_PLUGIN		(remember_position_plugin_get_type ())
 #define REMEMBER_POSITION_PLUGIN(o)		(G_TYPE_CHECK_INSTANCE_CAST ((o), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPlugin))
 #define REMEMBER_POSITION_PLUGIN_CLASS(k)	(G_TYPE_CHECK_CLASS_CAST((k), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPluginClass))
@@ -37,40 +36,28 @@ G_BEGIN_DECLS
 #define IS_REMEMBER_POSITION_PLUGIN_CLASS(k)	(G_TYPE_CHECK_CLASS_TYPE ((k), REMEMBER_POSITION_TYPE_PLUGIN))
 #define REMEMBER_POSITION_GET_CLASS(o)	(G_TYPE_INSTANCE_GET_CLASS ((o), REMEMBER_POSITION_TYPE_PLUGIN, RememberPositionPluginClass))
 
-/* Private structure type */
 typedef struct _RememberPositionPluginPrivate	RememberPositionPluginPrivate;
-
-/*
- * Main object structure
- */
 typedef struct _RememberPositionPlugin		RememberPositionPlugin;
+typedef struct _RememberPositionPluginClass	RememberPositionPluginClass;
 
 struct _RememberPositionPlugin
 {
-	GeditPlugin parent_instance;
+	PeasExtensionBase parent_instance;
 
 	/*< private >*/
 	RememberPositionPluginPrivate *priv;
 };
 
-/*
- * Class definition
- */
-typedef struct _RememberPositionPluginClass	RememberPositionPluginClass;
-
 struct _RememberPositionPluginClass
 {
-	GeditPluginClass parent_class;
+	PeasExtensionBaseClass parent_class;
 };
 
-/*
- * Public methods
- */
 GType	remember_position_plugin_get_type	(void) G_GNUC_CONST;
 
-/* All the plugins must implement this function */
-G_MODULE_EXPORT GType register_gedit_plugin (GTypeModule *module);
+G_MODULE_EXPORT void	peas_register_types		(PeasObjectModule *module);
 
 G_END_DECLS
 
 #endif /* __REMEMBER_POSITION_PLUGIN_H__ */
+
